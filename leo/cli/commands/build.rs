@@ -40,7 +40,6 @@ impl From<BuildOptions> for CompilerOptions {
     fn from(options: BuildOptions) -> Self {
         Self {
             build: leo_compiler::BuildOptions {
-                dce_enabled: options.enable_dce,
                 conditional_block_max_depth: options.conditional_block_max_depth,
                 disable_conditional_branch_type_checking: options.disable_conditional_branch_type_checking,
             },
@@ -186,8 +185,6 @@ fn compile_leo_file<N: Network>(
     let mut aleo_file_path = build.to_path_buf();
     aleo_file_path.push(format!("main.{}", program_id.network()));
 
-    let enable_dce = options.enable_dce;
-
     // Create a new instance of the Leo compiler.
     let mut compiler = Compiler::<N>::new(handler.clone(), outputs.to_path_buf(), Some(options.into()), stubs);
 
@@ -200,10 +197,9 @@ fn compile_leo_file<N: Network>(
         .write_all(instructions.as_bytes())
         .map_err(CliError::failed_to_load_instructions)?;
 
-    if enable_dce {
-        tracing::info!("    {} statements before dead code elimination.", compiler.statements_before_dce);
-        tracing::info!("    {} statements after dead code elimination.", compiler.statements_after_dce);
-    }
+    tracing::info!("    {} statements before dead code elimination.", compiler.statements_before_dce);
+    tracing::info!("    {} statements after dead code elimination.", compiler.statements_after_dce);
+
     tracing::info!("✅ Compiled '{program_name}.aleo' into Aleo instructions");
     Ok(())
 }

@@ -154,11 +154,9 @@ impl<N: Network> Compiler<N> {
 
         self.do_pass::<FunctionInlining>(())?;
 
-        if self.compiler_options.build.dce_enabled {
-            let output = self.do_pass::<DeadCodeEliminating>(())?;
-            self.statements_before_dce = output.statements_before;
-            self.statements_after_dce = output.statements_after;
-        }
+        let output = self.do_pass::<DeadCodeEliminating>(())?;
+        self.statements_before_dce = output.statements_before;
+        self.statements_after_dce = output.statements_after;
 
         Ok(())
     }

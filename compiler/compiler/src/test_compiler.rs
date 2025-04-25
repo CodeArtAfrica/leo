@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with the Leo library. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{BuildOptions, Compiler, CompilerOptions};
+use crate::Compiler;
 
 use leo_ast::Stub;
 use leo_disassembler::disassemble_from_str;
@@ -35,14 +35,11 @@ pub const PROGRAM_DELIMITER: &str = "// --- Next Program --- //";
 
 pub fn whole_compile(
     source: &str,
-    dce_enabled: bool,
     handler: &Handler,
     import_stubs: IndexMap<Symbol, Stub>,
 ) -> Result<(String, String), LeoError> {
-    let options = CompilerOptions { build: BuildOptions { dce_enabled, ..Default::default() }, ..Default::default() };
-
     let mut compiler =
-        Compiler::<TestnetV0>::new(handler.clone(), "/fakedirectory-wont-use".into(), Some(options), import_stubs);
+        Compiler::<TestnetV0>::new(handler.clone(), "/fakedirectory-wont-use".into(), None, import_stubs);
 
     let filename = FileName::Custom("compiler-test".into());
 
@@ -51,7 +48,7 @@ pub fn whole_compile(
     Ok((bytecode, compiler.program_name))
 }
 
-fn run_test(test: &str, dce_enabled: bool, handler: &Handler) -> Result<String, ()> {
+fn run_test(test: &str, handler: &Handler) -> Result<String, ()> {
     // Initialize a `Process`. This should always succeed.
     let mut process = Process::<TestnetV0>::load().unwrap();
 
@@ -61,8 +58,7 @@ fn run_test(test: &str, dce_enabled: bool, handler: &Handler) -> Result<String, 
 
     // Compile each source file separately.
     for source in test.split(PROGRAM_DELIMITER) {
-        let (bytecode, program_name) =
-            handler.extend_if_error(whole_compile(source, dce_enabled, handler, import_stubs.clone()))?;
+        let (bytecode, program_name) = handler.extend_if_error(whole_compile(source, handler, import_stubs.clone()))?;
 
         // Parse the bytecode as an Aleo program.
         // Note that this function checks that the bytecode is well-formed.
@@ -88,21 +84,13 @@ fn run_test(test: &str, dce_enabled: bool, handler: &Handler) -> Result<String, 
 }
 
 fn runner(source: &str) -> String {
-    fn run(source: &str, dce_enabled: bool) -> String {
-        let buf = BufferEmitter::new();
-        let handler = Handler::new(buf.clone());
+    let buf = BufferEmitter::new();
+    let handler = Handler::new(buf.clone());
 
-        match run_test(source, dce_enabled, &handler) {
-            Ok(x) => x,
-            Err(()) => format!("{}{}", buf.extract_errs(), buf.extract_warnings()),
-        }
-    }
-
-    let with_dce_enabled = create_session_if_not_set_then(|_| run(source, true));
-
-    let with_dce_disabled = create_session_if_not_set_then(|_| run(source, false));
-
-    format!("DCE_ENABLED:\n{with_dce_enabled}\nDCE_DISABLED:\n{with_dce_disabled}")
+    create_session_if_not_set_then(|_| match run_test(source, &handler) {
+        Ok(x) => x,
+        Err(()) => format!("{}{}", buf.extract_errs(), buf.extract_warnings()),
+    })
 }
 
 #[test]
