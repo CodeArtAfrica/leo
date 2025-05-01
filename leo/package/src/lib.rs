@@ -86,6 +86,9 @@ pub use package::*;
 mod program;
 use program::*;
 
+mod upgrade_config;
+use upgrade_config::*;
+
 pub const SOURCE_DIRECTORY: &str = "src";
 
 pub const MAIN_FILENAME: &str = "main.leo";
