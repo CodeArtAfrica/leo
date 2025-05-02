@@ -21,6 +21,9 @@ rust-version = "1.85.1"
 [dependencies.leo-errors]
 workspace = true
 
+[dependencies.rayon]
+version = "1.10"
+
 [dependencies.indexmap]
 workspace = true
 

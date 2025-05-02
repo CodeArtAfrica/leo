@@ -1925,6 +1925,7 @@ dependencies = [
  "indexmap 2.9.0",
  "itertools 0.13.0",
  "leo-errors",
+ "rayon",
  "walkdir",
 ]
 
