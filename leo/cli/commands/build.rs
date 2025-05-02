@@ -122,6 +122,8 @@ fn handle_build<N: Network>(command: &LeoBuild, context: Context) -> Result<<Leo
                 } else {
                     imports_directory.join(format!("{}.aleo", program.name))
                 };
+                // Load the manifest in local dependency.
+                let manifest = Manifest::read_from_file(path.with_extension(leo_package::MANIFEST_FILENAME))?;
                 let bytecode = compile_leo_file::<N>(
                     path,
                     program.name,
@@ -129,6 +131,7 @@ fn handle_build<N: Network>(command: &LeoBuild, context: Context) -> Result<<Leo
                     &handler,
                     command.options.clone(),
                     stubs.clone(),
+                    manifest,
                 )?;
                 (bytecode, build_path)
             }
@@ -151,7 +154,7 @@ fn handle_build<N: Network>(command: &LeoBuild, context: Context) -> Result<<Leo
         description: String::new(),
         license: String::new(),
         dependencies: None,
-        upgrade: Default::default(),
+        upgrade: None,
     };
     fake_manifest.write_to_file(build_manifest_path)?;
 
@@ -167,6 +170,7 @@ fn compile_leo_file<N: Network>(
     handler: &Handler,
     options: BuildOptions,
     stubs: IndexMap<Symbol, Stub>,
+    manifest: Manifest,
 ) -> Result<String> {
     let enable_dce = options.enable_dce;
 
@@ -177,6 +181,7 @@ fn compile_leo_file<N: Network>(
         output_path.to_path_buf(),
         Some(options.into()),
         stubs,
+        manifest,
     );
 
     // Compile the Leo program into Aleo instructions.
