@@ -22,7 +22,7 @@ rust-version = "1.85.1"
 workspace = true
 
 [dependencies.anyhow]
-version = "1.0"
+workspace = true
 
 [dependencies.backtrace]
 version = "0.3.74"

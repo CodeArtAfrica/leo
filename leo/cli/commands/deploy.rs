@@ -262,9 +262,12 @@ fn handle_deploy<A: Aleo<Network = N, BaseField = N::Field>, N: Network>(
                 }
             }
             println!("✅ Created deployment transaction for '{}'\n", name.bold());
+            let id = transaction.id().to_string();
             handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, name)?;
+            let found =
+                crate::cli::check_transaction::check_transaction_with_message(&id, endpoint, &network.to_string())?;
             // Wait between successive deployments to prevent out of order deployments.
-            if index < all_paths.len() - 1 {
+            if !found && index < all_paths.len() - 1 {
                 std::thread::sleep(std::time::Duration::from_secs(command.wait));
             }
         } else {

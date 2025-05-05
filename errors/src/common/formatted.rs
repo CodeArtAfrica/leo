@@ -89,6 +89,7 @@ impl Formatted {
 impl fmt::Display for Formatted {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Some(source_file) = with_session_globals(|s| s.source_map.find_source_file(self.span.lo)) else {
+            writeln!(f, "{}", self.backtrace.message)?;
             return write!(f, "Can't find source file");
         };
 

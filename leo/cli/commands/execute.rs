@@ -188,10 +188,7 @@ fn handle_execute<A: Aleo>(
         let vm = VM::from(store)?;
 
         // Remove the `.aleo` extension from the program name, if it exists.
-        let program_name = match program_name.strip_suffix(".aleo") {
-            Some(name) => name.to_string(),
-            None => program_name,
-        };
+        let program_name = program_name.strip_suffix(".aleo").unwrap_or(&program_name);
         // Load the main program, and all of its imports.
         let program_id = &ProgramID::<A::Network>::from_str(&format!("{program_name}.aleo"))?;
         load_program_from_network(context.clone(), &mut vm.process().write(), program_id, network, endpoint)?;
@@ -203,9 +200,10 @@ fn handle_execute<A: Aleo>(
         // Determine if a priority fee is declared.
         let is_priority_fee_declared = command.fee_options.priority_fee > 0;
         // Compute the execution.
-        let execution = match vm.execute_authorization(authorization, None, Some(query.clone()), rng)? {
-            Transaction::Execute(_, _, execution, _) => execution,
-            _ => unreachable!("VM::execute_authorization should return a Transaction::Execute"),
+        let Transaction::Execute(_, _, execution, _) =
+            vm.execute_authorization(authorization, None, Some(query.clone()), rng)?
+        else {
+            panic!("VM::execute_authorization should return a Transaction::Execute");
         };
 
         let fee_record = if let Some(record) = command.fee_options.record {
@@ -249,7 +247,7 @@ fn handle_execute<A: Aleo>(
 
                 // Print the cost breakdown.
                 execution_cost_breakdown(
-                    &program_name,
+                    program_name,
                     base_fee as f64 / 1_000_000.0,
                     storage_cost as f64 / 1_000_000.0,
                     finalize_cost as f64 / 1_000_000.0,
@@ -323,7 +321,9 @@ fn handle_execute<A: Aleo>(
                 }
             }
             println!("✅ Created execution transaction for '{}'\n", program_id.to_string().bold());
-            handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, &program_name)?;
+            let id = transaction.id().to_string();
+            handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, program_name)?;
+            crate::cli::check_transaction::check_transaction_with_message(&id, endpoint, &network.to_string())?;
         } else {
             println!("✅ Successful dry run execution for '{}'\n", program_id.to_string().bold());
         }
