@@ -16,6 +16,8 @@
 
 use super::*;
 
+use crate::cli::check_transaction::TransactionStatus;
+
 use leo_package::{NetworkName, Package, ProgramData};
 
 use snarkvm::{
@@ -44,6 +46,11 @@ use text_tables;
 
 /// Deploys an Aleo program.
 #[derive(Parser, Debug)]
+#[command(group(
+    clap::ArgGroup::new("checking")
+        .multiple(false)
+        .args(["no_check", "recursive"])
+))]
 pub struct LeoDeploy {
     #[clap(flatten)]
     pub(crate) fee_options: FeeOptions,
@@ -51,12 +58,11 @@ pub struct LeoDeploy {
     pub(crate) no_build: bool,
     #[clap(long, help = "Enables recursive deployment of dependencies.", default_value = "false")]
     pub(crate) recursive: bool,
-    #[clap(
-        long,
-        help = "Time in seconds to wait between consecutive deployments. This is to help prevent a program from trying to be included in an earlier block than its dependency program.",
-        default_value = "12"
-    )]
-    pub(crate) wait: u64,
+    /// Don't explore blocks to report on the status of the deployment transaction, which otherwise will take
+    /// several seconds after the deployment is attempted. This cannot be used with `--recursive`, as we need
+    /// to make sure each dependent program is deployed before proceeding with the next.
+    #[clap(long, verbatim_doc_comment)]
+    no_check: bool,
     #[clap(flatten)]
     pub(crate) options: BuildOptions,
 }
@@ -263,12 +269,29 @@ fn handle_deploy<A: Aleo<Network = N, BaseField = N::Field>, N: Network>(
             }
             println!("✅ Created deployment transaction for '{}'\n", name.bold());
             let id = transaction.id().to_string();
-            handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, name)?;
-            let found =
-                crate::cli::check_transaction::check_transaction_with_message(&id, endpoint, &network.to_string())?;
-            // Wait between successive deployments to prevent out of order deployments.
-            if !found && index < all_paths.len() - 1 {
-                std::thread::sleep(std::time::Duration::from_secs(command.wait));
+            let broadcast =
+                || handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, name);
+            if command.no_check {
+                // Just do it, avoiding even the extra call to find the height.
+                println!("Not waiting to check the status of the deployment.");
+                broadcast()?;
+                continue;
+            }
+            let height_before = crate::cli::check_transaction::current_height(endpoint, network)?;
+            broadcast()?;
+            let status = crate::cli::check_transaction::check_transaction_with_message(
+                &id,
+                endpoint,
+                network,
+                height_before + 1,
+            )?;
+            if index < all_paths.len() - 1 {
+                // There are more deployments to make.
+                if status != Some(TransactionStatus::Accepted) {
+                    // But either this one failed or we couldn't find it.
+                    println!("Stopping after attempting to deploy {}.", name);
+                    println!("{} expected deployments skipped.", all_paths.len() - index - 1);
+                }
             }
         } else {
             println!("✅ Successful dry run deployment for '{}'\n", name.bold());

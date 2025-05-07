@@ -16,6 +16,8 @@
 
 use super::*;
 
+use crate::cli::query::QueryCommands;
+
 use leo_package::NetworkName;
 
 use aleo_std::StorageMode;
@@ -26,7 +28,6 @@ use snarkvm::{
 };
 use std::collections::HashMap;
 
-use crate::cli::query::QueryCommands;
 use dialoguer::{Confirm, theme::ColorfulTheme};
 #[cfg(not(feature = "only_testnet"))]
 use snarkvm::circuit::{AleoCanaryV0, AleoV0};
@@ -74,6 +75,10 @@ pub struct LeoExecute {
     file: Option<String>,
     #[clap(long, help = "Disables building of the project before execution.", default_value = "false")]
     pub(crate) no_build: bool,
+    /// Don't explore blocks to report on the status of the execute transaction, which otherwise will take
+    /// several seconds after the execution is attempted.
+    #[clap(long, verbatim_doc_comment)]
+    no_check: bool,
 }
 
 impl Command for LeoExecute {
@@ -218,8 +223,8 @@ fn handle_execute<A: Aleo>(
             None => {
                 let (base_fee, (storage_cost, finalize_cost)) =
                     // Attempt to get the height of the latest block to determine which version of the execution cost to use.
-                    if let Ok(height) = get_latest_block_height(endpoint, &network.to_string(), &context) {
-                        if height < A::Network::CONSENSUS_HEIGHT(ConsensusVersion::V2).unwrap() {
+                    if let Ok(height) = crate::cli::check_transaction::current_height(endpoint, network) {
+                        if height < A::Network::CONSENSUS_HEIGHT(ConsensusVersion::V2).unwrap() as usize {
                             execution_cost_v1(&vm.process().read(), &execution)?
                         } else {
                             execution_cost_v2(&vm.process().read(), &execution)?
@@ -322,8 +327,23 @@ fn handle_execute<A: Aleo>(
             }
             println!("✅ Created execution transaction for '{}'\n", program_id.to_string().bold());
             let id = transaction.id().to_string();
-            handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, program_name)?;
-            crate::cli::check_transaction::check_transaction_with_message(&id, endpoint, &network.to_string())?;
+            let broadcast = || {
+                handle_broadcast(&format!("{}/{}/transaction/broadcast", endpoint, network), transaction, program_name)
+            };
+            if command.no_check {
+                // Just do it, avoiding even the extra call to find the height.
+                println!("Not waiting to check the status of the execution.");
+                broadcast()?;
+            } else {
+                let height_before = crate::cli::check_transaction::current_height(endpoint, network)?;
+                broadcast()?;
+                crate::cli::check_transaction::check_transaction_with_message(
+                    &id,
+                    endpoint,
+                    network,
+                    height_before + 1,
+                )?;
+            }
         } else {
             println!("✅ Successful dry run execution for '{}'\n", program_id.to_string().bold());
         }

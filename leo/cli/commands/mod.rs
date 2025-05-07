@@ -252,30 +252,6 @@ fn check_balance<N: Network>(
     }
 }
 
-// A helper function to query for the latest block height.
-fn get_latest_block_height(endpoint: &str, network: &str, context: &Context) -> Result<u32> {
-    // Query the latest block height.
-    let height = LeoQuery {
-        endpoint: Some(endpoint.to_string()),
-        network: Some(network.to_string()),
-        command: QueryCommands::Block {
-            command: query::LeoBlock {
-                id: None,
-                latest: false,
-                latest_hash: false,
-                latest_height: true,
-                range: None,
-                transactions: false,
-                to_height: false,
-            },
-        },
-    }
-    .execute(Context::new(context.path.clone(), context.home.clone(), true)?)?;
-    // Parse the height.
-    let height = height.parse::<u32>().map_err(CliError::string_parse_error)?;
-    Ok(height)
-}
-
 /// Determine if the transaction should be broadcast or displayed to user.
 fn handle_broadcast<N: Network>(endpoint: &str, transaction: Transaction<N>, operation: &str) -> Result<()> {
     println!("Broadcasting transaction to {}...\n", endpoint);

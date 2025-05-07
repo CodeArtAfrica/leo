@@ -15,12 +15,13 @@
 // along with the Leo library. If not, see <https://www.gnu.org/licenses/>.
 
 use leo_errors::Result;
+use leo_package::NetworkName;
 
 use anyhow::anyhow;
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize)]
-enum TransactionStatus {
+pub enum TransactionStatus {
     #[serde(rename = "accepted")]
     Accepted,
     #[serde(rename = "aborted")]
@@ -47,19 +48,26 @@ struct Block {
     aborted_transaction_ids: Vec<String>,
 }
 
-fn current_height(endpoint: &str, network: &str) -> Result<usize> {
+pub fn current_height(endpoint: &str, network: NetworkName) -> Result<usize> {
     let height_url = format!("{endpoint}/{network}/block/height/latest");
     let height_str = leo_package::fetch_from_network_plain(&height_url)?;
     let height: usize = height_str.parse().map_err(|e| anyhow!("error parsing height: {e}"))?;
     Ok(height)
 }
 
-fn status_at_height(id: &str, endpoint: &str, network: &str, height: usize) -> Result<Option<TransactionStatus>> {
+fn status_at_height(
+    id: &str,
+    endpoint: &str,
+    network: NetworkName,
+    height: usize,
+) -> Result<Option<TransactionStatus>> {
+    const MAX_WAIT: usize = 8;
+
     // Wait until the block at `height` exists.
     for i in 0usize.. {
         if current_height(endpoint, network)? >= height {
             break;
-        } else if i >= 8 {
+        } else if i >= MAX_WAIT {
             // We've waited too long; give up.
             return Ok(None);
         } else {
@@ -102,31 +110,48 @@ fn status_at_height(id: &str, endpoint: &str, network: &str, height: usize) -> R
     Ok(None)
 }
 
-fn check_transaction(id: &str, endpoint: &str, network: &str) -> Result<Option<TransactionStatus>> {
-    let height = current_height(endpoint, network)?;
-    let starting = height.saturating_sub(4);
-    let mut status = None;
-    for use_height in starting..starting + 12 {
-        status = status_at_height(id, endpoint, network, use_height)?;
-        if status.is_some() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
+const BLOCKS_TO_CHECK: usize = 12;
 
-    Ok(status)
+struct CheckedTransaction {
+    blocks_checked: usize,
+    status: Option<TransactionStatus>,
 }
 
-/// Check to find the transaction id among recent and new blocks, printing its status (if found)
-/// to the user.
-pub fn check_transaction_with_message(id: &str, endpoint: &str, network: &str) -> Result<bool> {
-    println!("Waiting to find transaction result (this may take several seconds)...");
-    let status = crate::cli::check_transaction::check_transaction(id, endpoint, network)?;
-    match status {
+fn check_transaction(
+    id: &str,
+    endpoint: &str,
+    network: NetworkName,
+    start_height: usize,
+) -> Result<CheckedTransaction> {
+    for use_height in start_height..start_height + BLOCKS_TO_CHECK {
+        let status = status_at_height(id, endpoint, network, use_height)?;
+        if status.is_some() {
+            return Ok(CheckedTransaction { blocks_checked: use_height - start_height + 1, status });
+        }
+
+        // Avoid rate limits.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    Ok(CheckedTransaction { blocks_checked: BLOCKS_TO_CHECK, status: None })
+}
+
+/// Check to find the transaction id among new blocks, printing its status (if found)
+/// to the user. Returns `true` if and only if the transaction was found.
+pub fn check_transaction_with_message(
+    id: &str,
+    endpoint: &str,
+    network: NetworkName,
+    start_height: usize,
+) -> Result<Option<TransactionStatus>> {
+    println!("Searching up to {BLOCKS_TO_CHECK} blocks to find transaction (this may take several seconds)...");
+    let checked = crate::cli::check_transaction::check_transaction(id, endpoint, network, start_height)?;
+    println!("Explored {} blocks.", checked.blocks_checked);
+    match checked.status {
         Some(TransactionStatus::Accepted) => println!("Transaction accepted"),
         Some(TransactionStatus::Rejected) => println!("Transaction rejected"),
         Some(TransactionStatus::Aborted) => println!("Transaction aborted"),
         None => println!("Couldn't find the transaction after searching through several blocks"),
     }
-    Ok(status.is_some())
+    Ok(checked.status)
 }
