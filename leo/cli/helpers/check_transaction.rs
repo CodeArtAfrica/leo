@@ -77,7 +77,7 @@ fn status_at_height(
 
     let block_url = format!("{endpoint}/{network}/block/{height}");
     let block_str = leo_package::fetch_from_network_plain(&block_url)?;
-    let block: Block = serde_json::from_str(&block_str).expect("Failed to deserialize");
+    let block: Block = serde_json::from_str(&block_str).map_err(|e| anyhow!("Deserialization failure: {e}."))?;
     let maybe_this_transaction =
         block.transactions.iter().find(|transaction_result| transaction_result.transaction.id == id);
 
@@ -148,10 +148,10 @@ pub fn check_transaction_with_message(
     let checked = crate::cli::check_transaction::check_transaction(id, endpoint, network, start_height)?;
     println!("Explored {} blocks.", checked.blocks_checked);
     match checked.status {
-        Some(TransactionStatus::Accepted) => println!("Transaction accepted"),
-        Some(TransactionStatus::Rejected) => println!("Transaction rejected"),
-        Some(TransactionStatus::Aborted) => println!("Transaction aborted"),
-        None => println!("Couldn't find the transaction after searching through several blocks"),
+        Some(TransactionStatus::Accepted) => println!("Transaction accepted."),
+        Some(TransactionStatus::Rejected) => println!("Transaction rejected."),
+        Some(TransactionStatus::Aborted) => println!("Transaction aborted."),
+        None => println!("Couldn't find the transaction."),
     }
     Ok(checked.status)
 }
