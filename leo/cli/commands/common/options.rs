@@ -79,13 +79,6 @@ pub struct EnvOptions {
 #[derive(Parser, Clone, Debug, Default)]
 pub struct FeeOptions {
     #[clap(
-        short,
-        long,
-        help = "Don't ask for confirmation. DO NOT SET THIS FLAG UNLESS YOU KNOW WHAT YOU ARE DOING",
-        default_value = "false"
-    )]
-    pub(crate) yes: bool,
-    #[clap(
         long,
         help = "[UNUSED] Base fees in microcredits, delimited by `|`, and used in order. The fees must either be valid `u64` or `default`. Defaults to automatic calculation.",
         value_delimiter = '|',
@@ -107,8 +100,6 @@ pub struct FeeOptions {
         value_parser = parse_record_string,
     )]
     fee_records: Vec<Option<String>>,
-    #[clap(long, help = "Consensus version to use for the transaction.")]
-    pub(crate) consensus_version: Option<u8>,
 }
 
 // A helper function to parse amounts, which can either be a `u64` or `default`.
@@ -138,16 +129,33 @@ fn parse_record<N: Network>(private_key: &PrivateKey<N>, record: &str) -> Result
     }
 }
 
+/// Additional options that are common across a number of commands.
+#[derive(Parser, Clone, Debug, Default)]
+pub struct ExtraOptions {
+    #[clap(
+        short,
+        long,
+        help = "Don't ask for confirmation. DO NOT SET THIS FLAG UNLESS YOU KNOW WHAT YOU ARE DOING",
+        default_value = "false"
+    )]
+    pub(crate) yes: bool,
+    #[clap(
+        long,
+        help = "Consensus version to use. If one is provided, the CLI will attempt to determine it from the latest block."
+    )]
+    pub(crate) consensus_version: Option<u8>,
+}
+
 // A helper function to get the consensus version from the fee options.
 // If a consensus version is not provided, then attempt to query the current block height and use it to determine the version.
 pub fn get_consensus_version<N: Network>(
-    fee_options: &FeeOptions,
+    consensus_version: &Option<u8>,
     endpoint: &str,
     network: NetworkName,
     context: &Context,
 ) -> Result<ConsensusVersion> {
     // Get the consensus version.
-    match fee_options.consensus_version {
+    match consensus_version {
         Some(1) => Ok(ConsensusVersion::V1),
         Some(2) => Ok(ConsensusVersion::V2),
         Some(3) => Ok(ConsensusVersion::V3),

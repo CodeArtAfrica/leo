@@ -59,7 +59,9 @@ pub struct LeoExecute {
     #[clap(flatten)]
     pub(crate) env_override: EnvOptions,
     #[clap(flatten)]
-    compiler_options: BuildOptions,
+    pub(crate) extra: ExtraOptions,
+    #[clap(flatten)]
+    build_options: BuildOptions,
     #[arg(short, long, help = "The inputs to the program, from a file. Overrides the INPUTS argument.")]
     file: Option<String>,
 }
@@ -78,8 +80,13 @@ impl Command for LeoExecute {
         // Get the path to the home directory.
         let home_path = context.home()?;
         // If the current directory is a valid Leo package, then build it.
-        if let Ok(package) = Package::from_directory(path, home_path) {
-            LeoBuild { options: self.compiler_options.clone() }.execute(context.clone())?;
+        if let Ok(package) = Package::from_directory_no_graph(path, home_path) {
+            LeoCheck {
+                env_override: self.env_override.clone(),
+                extra: self.extra.clone(),
+                build_options: self.build_options.clone(),
+            }
+            .execute(context)?;
             // Return the package.
             Ok(Some(package))
         } else {
@@ -267,7 +274,8 @@ fn handle_execute<A: Aleo>(
         parse_fee_options(&private_key, &command.fee_options, 1)?.into_iter().next().unwrap_or((None, None, None));
 
     // Get the consensus version.
-    let consensus_version = get_consensus_version::<A::Network>(&command.fee_options, &endpoint, network, &context)?;
+    let consensus_version =
+        get_consensus_version::<A::Network>(&command.extra.consensus_version, &endpoint, network, &context)?;
 
     // Print the execution plan.
     print_execution_plan::<A::Network>(
@@ -285,7 +293,7 @@ fn handle_execute<A: Aleo>(
     );
 
     // Prompt the user to confirm the plan.
-    if !confirm("Do you want to proceed with execution?", command.fee_options.yes)? {
+    if !confirm("Do you want to proceed with execution?", command.extra.yes)? {
         println!("❌ Execution aborted.");
         return Ok(());
     }
@@ -361,7 +369,7 @@ fn handle_execute<A: Aleo>(
         println!("📡 Broadcasting execution for {program_name}...");
         // Get and confirm the fee with the user.
         let fee = transaction.fee_transition().expect("Expected a fee in the transaction");
-        if !confirm_fee(&fee, &private_key, &address, &endpoint, network, &context, command.fee_options.yes)? {
+        if !confirm_fee(&fee, &private_key, &address, &endpoint, network, &context, command.extra.yes)? {
             println!("❌ Execution aborted.");
             return Ok(());
         }
