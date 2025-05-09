@@ -267,15 +267,7 @@ fn handle_execute<A: Aleo>(
         parse_fee_options(&private_key, &command.fee_options, 1)?.into_iter().next().unwrap_or((None, None, None));
 
     // Get the consensus version.
-    let consensus_version = match command.fee_options.consensus_version {
-        Some(1) => ConsensusVersion::V1,
-        Some(2) => ConsensusVersion::V2,
-        Some(3) => ConsensusVersion::V3,
-        Some(4) => ConsensusVersion::V4,
-        Some(5) => ConsensusVersion::V4,
-        None => ConsensusVersion::V4,
-        Some(version) => return Err(CliError::custom(format!("Invalid consensus version: {version}")).into()),
-    };
+    let consensus_version = get_consensus_version::<A::Network>(&command.fee_options, &endpoint, network, &context)?;
 
     // Print the execution plan.
     print_execution_plan::<A::Network>(
@@ -289,6 +281,7 @@ fn handle_execute<A: Aleo>(
         priority_fee.unwrap_or(0),
         record.is_some(),
         &command.action,
+        consensus_version,
     );
 
     // Prompt the user to confirm the plan.
@@ -405,6 +398,7 @@ fn print_execution_plan<N: Network>(
     priority_fee: u64,
     fee_record: bool,
     action: &TransactionAction,
+    consensus_version: ConsensusVersion,
 ) {
     println!("\n{}", "🚀 Execution Plan Summary".bold().underline());
     println!("{}", "──────────────────────────────────────────────".dimmed());
@@ -414,6 +408,7 @@ fn print_execution_plan<N: Network>(
     println!("  {:16}{}", "Address:".cyan(), format!("{}...", &address.to_string()[..24]).yellow());
     println!("  {:16}{}", "Endpoint:", endpoint.yellow());
     println!("  {:16}{}", "Network:", network.to_string().yellow());
+    println!("  {:16}{}", "Consensus Version:", (consensus_version as u8).to_string().yellow());
 
     println!("\n{}", "🎯 Execution Target:".bold());
     println!("  {:16}{}", "Program:", program_name.cyan());

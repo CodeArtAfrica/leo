@@ -16,7 +16,7 @@
 
 use super::*;
 
-use leo_package::{Manifest, NetworkName, Package, ProgramData, fetch_program_from_network};
+use leo_package::{Manifest, NetworkName, Package, ProgramData, UpgradeConfig, fetch_program_from_network};
 
 #[cfg(not(feature = "only_testnet"))]
 use snarkvm::prelude::{CanaryV0, MainnetV0};
@@ -34,9 +34,12 @@ use snarkvm::{
 
 use aleo_std::StorageMode;
 use colored::*;
-use snarkvm::prelude::ProgramID;
+use snarkvm::prelude::{ConsensusVersion, ProgramID};
 use std::path::PathBuf;
 use text_tables;
+
+type DeploymentTask<N> =
+    (ProgramID<N>, Program<N>, Option<Manifest>, Option<u64>, Option<u64>, Option<Record<N, Plaintext<N>>>);
 
 /// Deploys an Aleo program.
 #[derive(Parser, Debug)]
@@ -122,7 +125,12 @@ fn handle_deploy<N: Network>(
             let program_id = ProgramID::<N>::from_str(&format!("{}.aleo", program.name))
                 .map_err(|e| CliError::custom(format!("Failed to parse program ID: {e}")))?;
             match &program.data {
-                ProgramData::Bytecode(bytecode) => Ok((program_id, bytecode.clone(), None)),
+                ProgramData::Bytecode(bytecode) => {
+                    // Parse the bytecode.
+                    let bytecode = Program::<N>::from_str(bytecode)
+                        .map_err(|e| CliError::custom(format!("Failed to parse program: {e}")))?;
+                    Ok((program_id, bytecode, None))
+                }
                 ProgramData::SourcePath(path) => {
                     // Get the path to the built bytecode.
                     let bytecode_path = if path.as_path() == source_directory.join("main.leo") {
@@ -133,6 +141,10 @@ fn handle_deploy<N: Network>(
                     // Fetch the bytecode.
                     let bytecode = std::fs::read_to_string(&bytecode_path).map_err(|e| {
                         CliError::custom(format!("Failed to read bytecode at {}: {e}", bytecode_path.display()))
+                    })?;
+                    // Parse the bytecode.
+                    let bytecode = Program::<N>::from_str(&bytecode).map_err(|e| {
+                        CliError::custom(format!("Failed to parse bytecode at {}: {e}", bytecode_path.display()))
                     })?;
                     // Get the package from the directory.
                     let mut path = path.clone();
@@ -162,8 +174,11 @@ fn handle_deploy<N: Network>(
         })
         .collect::<Vec<_>>();
 
+    // Get the consensus version.
+    let consensus_version = get_consensus_version::<N>(&command.fee_options, &endpoint, network, &context)?;
+
     // Print a summary of the deployment plan.
-    print_deployment_plan(&private_key, &address, &endpoint, &network, &tasks, &command.action);
+    print_deployment_plan(&private_key, &address, &endpoint, &network, &tasks, &command.action, consensus_version);
 
     // Prompt the user to confirm the plan.
     if !confirm("Do you want to proceed with deployment?", command.fee_options.yes)? {
@@ -182,10 +197,7 @@ fn handle_deploy<N: Network>(
 
     // For each of the programs, generate a deployment transaction.
     let mut transactions = Vec::new();
-    for (program_id, program_bytecode, manifest, _, priority_fee, fee_record) in tasks {
-        // Parse the program bytecode.
-        let program = Program::<N>::from_str(&program_bytecode)
-            .map_err(|e| CliError::custom(format!("Failed to parse program bytecode: {e}")))?;
+    for (program_id, program, manifest, _, priority_fee, fee_record) in tasks {
         // If the program is a local dependency, generate a deployment transaction.
         if manifest.is_some() {
             println!("📦 Creating deployment transaction for '{}'...\n", program_id.to_string().bold());
@@ -245,14 +257,6 @@ fn handle_deploy<N: Network>(
     if command.action.broadcast {
         for (program_id, transaction) in transactions.iter() {
             println!("📡 Broadcasting deployment for {program_id}...");
-            // Check if the program exists on the network.
-            if fetch_program_from_network(&program_id.to_string(), &endpoint, network).is_ok() {
-                println!("⚠️ The program '{}' already exists on the network.", program_id);
-                if confirm("Do you want to skip deploying this program?", command.fee_options.yes)? {
-                    println!("✅ Skipping deployment for '{}'.", program_id);
-                    continue;
-                }
-            }
             // Get and confirm the fee with the user.
             let fee = transaction.fee_transition().expect("Expected a fee in the transaction");
             if !confirm_fee(&fee, &private_key, &address, &endpoint, network, &context, command.fee_options.yes)? {
@@ -287,15 +291,54 @@ fn handle_deploy<N: Network>(
     Ok(())
 }
 
+/// Check the tasks to warn the user about any potential issues.
+/// Only local programs are checked.
+/// The following properties are checked:
+/// - The program does not exist on the network.
+/// - If the consensus version is less than V5, the program does not use V5 features.
+/// - If the consensus version is V5 or greater, the program contains a constructor.
+fn check_tasks_for_warnings<N: Network>(
+    endpoint: &str,
+    network: NetworkName,
+    tasks: &[DeploymentTask<N>],
+    consensus_version: ConsensusVersion,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for (program_id, program, manifest, _, _, _) in tasks {
+        if manifest.is_none() {
+            continue;
+        }
+        // Check if the program exists on the network.
+        if fetch_program_from_network(&program_id.to_string(), endpoint, network).is_ok() {
+            warnings.push(format!(
+                "The program '{}' already exists on the network. The deployment will likely fail.",
+                program_id
+            ));
+        }
+        // Check if the program uses V5 features.
+        if consensus_version < ConsensusVersion::V5 && program.contains_v5_syntax() {
+            warnings.push(format!("The program '{}' uses V5 features but the consensus version is less than V5. The deployment will likely fail", program_id));
+        }
+        // Check if the program contains a constructor.
+        if consensus_version >= ConsensusVersion::V5 && !program.contains_constructor() {
+            warnings.push(format!(
+                "The program '{}' does not contain a constructor. The deployment will likely fail",
+                program_id
+            ));
+        }
+    }
+    warnings
+}
+
 /// Pretty-print the deployment plan in a readable format.
-#[allow(clippy::type_complexity)]
 fn print_deployment_plan<N: Network>(
     private_key: &PrivateKey<N>,
     address: &Address<N>,
     endpoint: &str,
     network: &NetworkName,
-    tasks: &[(ProgramID<N>, String, Option<Manifest>, Option<u64>, Option<u64>, Option<Record<N, Plaintext<N>>>)],
+    tasks: &[DeploymentTask<N>],
     action: &TransactionAction,
+    consensus_version: ConsensusVersion,
 ) {
     use text_tables::render;
 
@@ -311,15 +354,30 @@ fn print_deployment_plan<N: Network>(
     println!("  {:16}{}", "Address:".cyan(), format!("{}...", &address.to_string()[..24]).yellow());
     println!("  {:16}{}", "Endpoint:".cyan(), endpoint.yellow());
     println!("  {:16}{}", "Network:".cyan(), network.to_string().yellow());
+    println!("  {:16}{}", "Consensus Version:".cyan(), (consensus_version as u8).to_string().yellow());
 
     // Tasks
     println!("\n{}", "📦 Deployment Tasks:".bold());
 
-    let mut table =
-        vec![["Program".to_string(), "Base Fee".to_string(), "Priority Fee".to_string(), "Fee Record".to_string()]];
+    let mut table = vec![[
+        "Program".to_string(),
+        "Upgrade".to_string(),
+        "Base Fee".to_string(),
+        "Priority Fee".to_string(),
+        "Fee Record".to_string(),
+    ]];
 
-    for (name, _, _, _, priority_fee, record) in local.iter() {
+    for (name, _, manifest, _, priority_fee, record) in local.iter() {
         let name = name.to_string();
+        // Get the upgrade mode specified in the manifest.
+        let manifest = manifest.as_ref().expect("Local program should have a manifest");
+        let upgrade = match manifest.upgrade {
+            None => "none".to_string(),
+            Some(UpgradeConfig::Admin { .. }) => "admin".to_string(),
+            Some(UpgradeConfig::Checksum { .. }) => "checksum".to_string(),
+            Some(UpgradeConfig::Custom) => "custom".to_string(),
+            Some(UpgradeConfig::NoUpgrade) => "no upgrade".to_string(),
+        };
         // Base fees are not used at the moment, so we can ignore them.
         let base_fee = "auto".to_string();
         let priority_fee = priority_fee.map_or("0".into(), |v| v.to_string());
@@ -328,7 +386,7 @@ fn print_deployment_plan<N: Network>(
             false => "no (public fee)".to_string(),
         };
 
-        table.push([name, base_fee, priority_fee, record]);
+        table.push([name, upgrade, base_fee, priority_fee, record]);
     }
 
     let mut buf = Vec::new();
@@ -360,6 +418,15 @@ fn print_deployment_plan<N: Network>(
         println!("  - Your transaction(s) will be broadcast to {}", endpoint.bold());
     } else {
         println!("  - Your transaction(s) will NOT be broadcast to the network.");
+    }
+
+    // Warnings
+    let warnings = check_tasks_for_warnings(endpoint, *network, tasks, consensus_version);
+    if !warnings.is_empty() {
+        println!("\n{}", "⚠️ Warnings:".bold().red());
+        for warning in warnings {
+            println!("  - {}", warning.dimmed());
+        }
     }
     println!("{}", "──────────────────────────────────────────────\n".dimmed());
 }

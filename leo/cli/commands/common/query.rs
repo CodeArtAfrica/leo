@@ -20,6 +20,7 @@ use snarkvm::prelude::{Program, ProgramID};
 
 use super::*;
 
+use leo_package::NetworkName;
 use ureq::Response;
 
 /// A helper function to query the public balance of an address.
@@ -51,8 +52,7 @@ pub fn get_public_balance<N: Network>(
 }
 
 // A helper function to query for the latest block height.
-#[allow(dead_code)]
-pub fn get_latest_block_height(endpoint: &str, network: &str, context: &Context) -> Result<u32> {
+pub fn get_latest_block_height(endpoint: &str, network: NetworkName, context: &Context) -> Result<u32> {
     // Query the latest block height.
     let height = LeoQuery {
         endpoint: Some(endpoint.to_string()),

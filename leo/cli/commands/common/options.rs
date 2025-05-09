@@ -15,6 +15,8 @@
 // along with the Leo library. If not, see <https://www.gnu.org/licenses/>.
 
 use super::*;
+use leo_package::NetworkName;
+use snarkvm::prelude::ConsensusVersion;
 
 /// Compiler Options wrapper for Build command. Also used by other commands which
 /// require Build command output as their input.
@@ -133,6 +135,34 @@ fn parse_record<N: Network>(private_key: &PrivateKey<N>, record: &str) -> Result
             Ok(ciphertext.decrypt(&view_key)?)
         }
         false => Ok(Record::<N, Plaintext<N>>::from_str(record)?),
+    }
+}
+
+// A helper function to get the consensus version from the fee options.
+// If a consensus version is not provided, then attempt to query the current block height and use it to determine the version.
+pub fn get_consensus_version<N: Network>(
+    fee_options: &FeeOptions,
+    endpoint: &str,
+    network: NetworkName,
+    context: &Context,
+) -> Result<ConsensusVersion> {
+    // Get the consensus version.
+    match fee_options.consensus_version {
+        Some(1) => Ok(ConsensusVersion::V1),
+        Some(2) => Ok(ConsensusVersion::V2),
+        Some(3) => Ok(ConsensusVersion::V3),
+        Some(4) => Ok(ConsensusVersion::V4),
+        Some(5) => Ok(ConsensusVersion::V5),
+        // If none is provided, then attempt to query the current block height and use it to determine the version.
+        None => get_latest_block_height(endpoint, network, context)
+            .and_then(|current_block_height| Ok(N::CONSENSUS_VERSION(current_block_height)?))
+            .map_err(|_| {
+                CliError::custom(
+                    "Failed to get consensus version. Please provide a version to use via `--consensus_version`",
+                )
+                .into()
+            }),
+        Some(version) => Err(CliError::custom(format!("Invalid consensus version: {version}")).into()),
     }
 }
 
