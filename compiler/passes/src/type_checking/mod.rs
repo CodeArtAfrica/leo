@@ -74,6 +74,7 @@ impl Pass for TypeChecking {
             used_structs: IndexSet::new(),
             conditional_scopes: Vec::new(),
             limits: input,
+            external_record_inputs: Default::default(),
         };
         visitor.visit_program(ast.as_repr());
         visitor.state.handler.last_err().map_err(|e| *e)?;

@@ -1003,4 +1003,37 @@ create_messages!(
         msg: format!("Cannot assign to the mapping `{var}`."),
         help: None,
     }
+
+    @formatted
+    ternary_over_external_records {
+        args: (ty: impl Display),
+        msg: format!("Cannot apply ternary conditional to type `{ty}`."),
+        help: Some("Ternary conditionals may not contain an external record type.".to_string()),
+    }
+
+    @formatted
+    assignment_to_external_record {
+        args: (ty: impl Display),
+        msg: format!("Cannot assign to external record type `{ty}` or a member thereof."),
+        help: Some("External record types and their members may not be assigned to.".to_string()),
+    }
+
+    // Since external record inputs may not be output, we must track them. This
+    // becomes intricate when they can be placed in tuples, so let's just forbid that.
+    // (We could also do the tracking after flattening, but we'd still have goofy rules -
+    // such as not being able to apply ternary conditionals to tuples with external record
+    // members.)
+    @formatted
+    external_record_in_tuple {
+        args: (local_name: impl Display, input_name: impl Display),
+        msg: format!("Cannot construct a tuple with input external record member {local_name} (received as input {input_name})."),
+        help: None,
+    }
+
+    @formatted
+    external_record_output {
+        args: (ty: impl Display, local_name: impl Display, input_name: impl Display),
+        msg: format!("Cannot output input external record `{local_name}: {ty}` (which was received as input {input_name})."),
+        help: None,
+    }
 );

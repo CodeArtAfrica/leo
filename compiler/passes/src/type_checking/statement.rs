@@ -205,6 +205,16 @@ impl StatementVisitor for TypeCheckingVisitor<'_> {
                 }
             }
         }
+
+        // Are we giving a new name to an external record input?
+        // No need to check for `Multiple`, as tuples may not have external record input members.
+        if let DefinitionPlace::Single(identifier) = &input.place {
+            if let Expression::Identifier(rhs_identifier) = &input.value {
+                if let Some(input_name) = self.external_record_inputs.get(&rhs_identifier.name).cloned() {
+                    self.external_record_inputs.insert(identifier.name, input_name);
+                }
+            }
+        }
     }
 
     fn visit_expression_statement(&mut self, input: &ExpressionStatement) {
@@ -301,5 +311,22 @@ impl StatementVisitor for TypeCheckingVisitor<'_> {
         }
 
         self.visit_expression(&input.expression, &Some(return_type));
+
+        // We need to make sure we're not outputting an external record input.
+
+        // Iterator over any of the expression and its members which are identifiers.
+        let ids = if let Expression::Tuple(tuple) = &input.expression { Some(tuple.elements.iter()) } else { None }
+            .into_iter()
+            .flatten()
+            .chain(std::iter::once(&input.expression))
+            .filter_map(|expr| if let Expression::Identifier(id) = expr { Some(id) } else { None });
+
+        for id in ids {
+            if let Some(input_name) = self.external_record_inputs.get(&id.name) {
+                let ty = self.state.type_table.get(&id.id()).expect("Type checking should have happened.");
+                self.emit_err(TypeCheckerError::external_record_output(ty, id, input_name, id.span()));
+                return;
+            }
+        }
     }
 }

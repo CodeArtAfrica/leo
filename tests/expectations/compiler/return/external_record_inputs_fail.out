@@ -1,0 +1,43 @@
+DCE_ENABLED:
+Error [ETYC0372129]: Cannot output input external record `x: test0.aleo/R` (which was received as input x).
+    --> compiler-test:7:16
+     |
+   7 |         return x;
+     |                ^
+Error [ETYC0372129]: Cannot output input external record `y: test0.aleo/R` (which was received as input x).
+    --> compiler-test:12:16
+     |
+  12 |         return y;
+     |                ^
+Error [ETYC0372128]: Cannot construct a tuple with input external record member z (received as input x).
+    --> compiler-test:18:48
+     |
+  18 |         let y: (test0.aleo/R, test0.aleo/R) = (z, z);
+     |                                                ^
+Error [ETYC0372128]: Cannot construct a tuple with input external record member z (received as input x).
+    --> compiler-test:18:51
+     |
+  18 |         let y: (test0.aleo/R, test0.aleo/R) = (z, z);
+     |                                                   ^
+
+DCE_DISABLED:
+Error [ETYC0372129]: Cannot output input external record `x: test0.aleo/R` (which was received as input x).
+    --> compiler-test:7:16
+     |
+   7 |         return x;
+     |                ^
+Error [ETYC0372129]: Cannot output input external record `y: test0.aleo/R` (which was received as input x).
+    --> compiler-test:12:16
+     |
+  12 |         return y;
+     |                ^
+Error [ETYC0372128]: Cannot construct a tuple with input external record member z (received as input x).
+    --> compiler-test:18:48
+     |
+  18 |         let y: (test0.aleo/R, test0.aleo/R) = (z, z);
+     |                                                ^
+Error [ETYC0372128]: Cannot construct a tuple with input external record member z (received as input x).
+    --> compiler-test:18:51
+     |
+  18 |         let y: (test0.aleo/R, test0.aleo/R) = (z, z);
+     |                                                   ^

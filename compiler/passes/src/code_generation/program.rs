@@ -180,10 +180,20 @@ impl<'a> CodeGeneratingVisitor<'a> {
 
         let mut futures = futures.iter();
 
+        self.record_inputs.clear();
+
         // Construct and append the input declarations of the function.
         for input in function.input.iter() {
             let register_string = format!("r{}", self.next_register);
             self.next_register += 1;
+
+            // Track all inputs which are records, and whether they are internal.
+            if let Type::Composite(comp) = &input.type_ {
+                let program = comp.program.unwrap_or(self.program_id.unwrap().name.name);
+                if self.state.symbol_table.lookup_record(Location::new(program, comp.id.name)).is_some() {
+                    self.record_inputs.insert(register_string.clone());
+                }
+            }
 
             let type_string = {
                 self.variable_mapping.insert(input.identifier.name, register_string.clone());

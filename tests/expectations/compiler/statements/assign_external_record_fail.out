@@ -1,0 +1,45 @@
+DCE_ENABLED:
+Error [ETYC0372127]: Cannot assign to external record type `test0.aleo/R` or a member thereof.
+    --> compiler-test:12:13
+     |
+  12 |             r1 = test0.aleo/foo();
+     |             ^^
+     |
+     = External record types and their members may not be assigned to.
+Error [ETYC0372127]: Cannot assign to external record type `test0.aleo/R` or a member thereof.
+    --> compiler-test:20:18
+     |
+  20 |             tupl.0 = test0.aleo/foo();
+     |                  ^
+     |
+     = External record types and their members may not be assigned to.
+Error [ETYC0372127]: Cannot assign to external record type `test0.aleo/R` or a member thereof.
+    --> compiler-test:27:9
+     |
+  27 |         r.x = x;
+     |         ^
+     |
+     = External record types and their members may not be assigned to.
+
+DCE_DISABLED:
+Error [ETYC0372127]: Cannot assign to external record type `test0.aleo/R` or a member thereof.
+    --> compiler-test:12:13
+     |
+  12 |             r1 = test0.aleo/foo();
+     |             ^^
+     |
+     = External record types and their members may not be assigned to.
+Error [ETYC0372127]: Cannot assign to external record type `test0.aleo/R` or a member thereof.
+    --> compiler-test:20:18
+     |
+  20 |             tupl.0 = test0.aleo/foo();
+     |                  ^
+     |
+     = External record types and their members may not be assigned to.
+Error [ETYC0372127]: Cannot assign to external record type `test0.aleo/R` or a member thereof.
+    --> compiler-test:27:9
+     |
+  27 |         r.x = x;
+     |         ^
+     |
+     = External record types and their members may not be assigned to.

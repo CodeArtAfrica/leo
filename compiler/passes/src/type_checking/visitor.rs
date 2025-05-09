@@ -40,6 +40,8 @@ pub struct TypeCheckingVisitor<'a> {
     pub limits: TypeCheckingInput,
     /// For detecting the error `TypeCheckerError::async_cannot_assign_outside_conditional`.
     pub conditional_scopes: Vec<IndexSet<Symbol>>,
+    // Maps the use name to the input name.
+    pub external_record_inputs: IndexMap<Symbol, Symbol>,
 }
 
 impl TypeCheckingVisitor<'_> {
@@ -963,6 +965,11 @@ impl TypeCheckingVisitor<'_> {
             // No need to check compatibility of these types; that's already been done
             let table_type = inferred_inputs.get(i).unwrap_or_else(|| input.type_());
 
+            // We have to track external record inputs to make sure they don't get output.
+            if self.is_external_record(table_type) {
+                self.external_record_inputs.insert(input.identifier.name, input.identifier.name);
+            }
+
             // Check that the type of input parameter is defined.
             self.assert_type_is_valid(table_type, input.span());
 
@@ -1148,7 +1155,10 @@ impl TypeCheckingVisitor<'_> {
         let comp = record_comp.or_else(|| self.state.symbol_table.lookup_struct(name));
         // Record the usage.
         if let Some(s) = comp {
-            self.used_structs.insert(s.identifier.name);
+            // If it's a struct or internal record, mark it used.
+            if !s.is_record || program == self.scope_state.program_name {
+                self.used_structs.insert(s.identifier.name);
+            }
         }
         comp.cloned()
     }
@@ -1196,6 +1206,17 @@ impl TypeCheckingVisitor<'_> {
             self.state.handler.emit_err(TypeCheckerError::invalid_operation_inside_finalize(name, span))
         } else if self.scope_state.variant != Some(Variant::AsyncFunction) && finalize_op {
             self.state.handler.emit_err(TypeCheckerError::invalid_operation_outside_finalize(name, span))
+        }
+    }
+
+    pub fn is_external_record(&self, ty: &Type) -> bool {
+        if let Type::Composite(typ) = &ty {
+            let this_program = self.scope_state.program_name.unwrap();
+            let program = typ.program.unwrap_or(this_program);
+            program != this_program
+                && self.state.symbol_table.lookup_record(Location::new(program, typ.id.name)).is_some()
+        } else {
+            false
         }
     }
 }
