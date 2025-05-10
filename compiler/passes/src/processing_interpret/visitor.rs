@@ -21,6 +21,7 @@ use leo_span::Symbol;
 
 pub struct ProcessingInterpretVisitor<'a> {
     pub state: &'a mut CompilerState,
+    /// The variant of the function we are currently traversing.
     pub current_variant: Variant,
     pub program_name: Symbol,
 }

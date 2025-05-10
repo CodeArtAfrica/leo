@@ -117,11 +117,17 @@ fn handle_test(command: LeoTest, context: Context, package: Package) -> Result<(
     let program_name_symbol = Symbol::intern(program_name);
     let build_directory = package.build_directory();
 
+    let credits = Symbol::intern("credits");
+
     // Get bytecode and name for all programs, either directly or from the filesystem if they were compiled.
     let programs: Vec<run_with_ledger::Program> = package
         .programs
         .iter()
-        .map(|program| {
+        .filter_map(|program| {
+            // Skip credits.aleo so we don't try to deploy it again.
+            if program.name == credits {
+                return None;
+            }
             let bytecode = match &program.data {
                 ProgramData::Bytecode(c) => c.clone(),
                 ProgramData::SourcePath(..) => {
@@ -135,7 +141,7 @@ fn handle_test(command: LeoTest, context: Context, package: Package) -> Result<(
                         .unwrap_or_else(|e| panic!("Failed to read Aleo file at {}: {}", aleo_path.display(), e))
                 }
             };
-            run_with_ledger::Program { bytecode, name: program.name.to_string() }
+            Some(run_with_ledger::Program { bytecode, name: program.name.to_string() })
         })
         .collect();
 

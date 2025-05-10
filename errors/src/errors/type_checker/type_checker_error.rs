@@ -569,7 +569,7 @@ create_messages!(
     @formatted
     operation_must_be_in_finalize_block {
         args: (),
-        msg: format!("This operation can only be used in an async function."),
+        msg: "This operation can only be used in an async function or interpret.".to_string(),
         help: None,
     }
 

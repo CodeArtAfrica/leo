@@ -106,6 +106,7 @@ mod tests {
     in
     inline
     input
+    interpret
     let
     mut
     private

@@ -41,6 +41,7 @@ impl Pass for ProcessingInterpret {
     fn do_pass(_input: Self::Input, state: &mut CompilerState) -> Result<Self::Output> {
         let mut ast = std::mem::take(&mut state.ast);
 
+        // We set the `current_variant` before traversing each function. We use `Inline` here as a placeholder.
         let mut visitor =
             ProcessingInterpretVisitor { state, current_variant: Variant::Inline, program_name: Symbol::default() };
         ast.ast = visitor.reconstruct_program(ast.ast);
