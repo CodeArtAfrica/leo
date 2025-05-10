@@ -24,7 +24,6 @@ use snarkvm::{
         Execution,
         Ledger,
         PrivateKey,
-        Process,
         ProgramID,
         TestnetV0,
         Transaction,
@@ -110,9 +109,6 @@ pub fn run_with_ledger(
         return Ok(Vec::new());
     }
 
-    // Initialize a `Process`. This should always succeed.
-    let mut process = Process::<CurrentNetwork>::load().unwrap();
-
     // Initialize an rng.
     let mut rng = ChaCha20Rng::seed_from_u64(config.seed);
 
@@ -137,10 +133,6 @@ pub fn run_with_ledger(
         // Note that this function checks that the bytecode is well-formed.
         let aleo_program =
             ProgramCore::from_str(bytecode).map_err(|_| anyhow!("Failed to parse bytecode of program {name}"))?;
-
-        // Add the program to the process.
-        // Note that this function performs an additional validity check on the bytecode.
-        process.add_program(&aleo_program).map_err(|_| anyhow!("Failed to add program {name}"))?;
 
         // Add the program to the ledger.
         // Note that this function performs an additional validity check on the bytecode.
@@ -277,7 +269,7 @@ pub fn run_with_ledger(
             handler.emit_err(LeoError::Anyhow(e));
         }
 
-        // Extract the execution and remove the global state root.
+        // Extract the execution.
         let execution = if let Some(Transaction::Execute(_, _, execution, _)) = execution {
             let proof = execution.proof().cloned();
             let transitions = execution.into_transitions();
