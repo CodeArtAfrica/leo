@@ -20,7 +20,8 @@ use snarkvm::prelude::{Program, ProgramID};
 
 use super::*;
 
-use leo_package::NetworkName;
+use leo_package::{NetworkName, ProgramData};
+use leo_span::Symbol;
 use ureq::Response;
 
 /// A helper function to query the public balance of an address.
@@ -126,7 +127,7 @@ pub fn handle_broadcast<N: Network>(endpoint: &str, transaction: &Transaction<N>
 pub fn load_programs_from_network<N: Network>(
     context: &Context,
     program_id: ProgramID<N>,
-    network: &str,
+    network: NetworkName,
     endpoint: &str,
 ) -> Result<Vec<(ProgramID<N>, Program<N>)>> {
     use snarkvm::prelude::Program;
@@ -147,18 +148,18 @@ pub fn load_programs_from_network<N: Network>(
         }
 
         // Fetch the program source from the network.
-        let program_src = LeoQuery {
-            endpoint: Some(endpoint.to_string()),
-            network: Some(network.to_string()),
-            command: QueryCommands::Program {
-                command: query::LeoProgram {
-                    name: current_id.clone().to_string(),
-                    mappings: false,
-                    mapping_value: None,
-                },
-            },
-        }
-        .execute(Context::new(context.path.clone(), context.home.clone(), true)?)?;
+        let ProgramData::Bytecode(program_src) = leo_package::Program::fetch(
+            Symbol::intern(&current_id.name().to_string()),
+            None,
+            &context.home()?,
+            network,
+            endpoint,
+        )
+        .map_err(|_| CliError::custom(format!("Failed to fetch program source for ID: {current_id}")))?
+        .data
+        else {
+            panic!("Expected bytecode when fetching a remote program");
+        };
 
         // Parse the program source into a Program object.
         let program = Program::<N>::from_str(&program_src)

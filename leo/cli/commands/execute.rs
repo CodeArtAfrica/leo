@@ -311,7 +311,7 @@ fn handle_execute<A: Aleo>(
     // Note: The dependencies are downloaded in "post-order" (child before parent).
     if !is_local {
         println!("⬇️ Downloading {program_name} and its dependencies from {endpoint}...");
-        programs = load_programs_from_network(&context, program_id, &network.to_string(), &endpoint)?;
+        programs = load_programs_from_network(&context, program_id, network, &endpoint)?;
     };
 
     // Add the programs to the VM.
